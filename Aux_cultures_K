@@ -1,0 +1,100 @@
+#load / observe data
+library(deSolve)
+
+setwd("C:/Users/Colin/Desktop")
+dataset = read.csv('CC.csv',sep = '')
+plot(dataset$t,dataset$P)
+P = dataset$P
+
+
+
+#### pour un K fixe dans le temps ####
+resultno=nls(P ~  K*(1/(1+((K/P[1])-1)*exp(-0.8*t))),data=dataset,start=c(K=5))
+print(summary(resultno))
+K = 3.0920
+time = seq(0,10,0.01)
+resno = K*(1/(1+((K/dataset$P[1])-1)*exp(-0.8*time)))
+plot(dataset$t,dataset$P)
+lines(time,resno, col = 'red')
+
+
+
+#### pour un K a variation lineaire dans le temps ####
+#fonction utilisant ode
+donnees = function(K0,a){
+  odef = function(t, state, parms){
+    with(as.list(c(state,a)),{
+      dK = a
+      dP = P*0.8*(1-P/K) 
+      return(list(c(dK, dP))) 
+    })
+  }
+  state = c(K = K0, P = dataset$P[1])
+  dt = 0.5
+  times = seq(0,10,dt)
+  
+  out = ode(state, times, odef, a)
+  out = data.frame(out)
+  
+  return(out$P)
+}
+
+
+#fonction somme des ecarts au carre:
+SSE = function(th,obs){
+  return(sum((th-obs)^2))
+}
+
+
+#minimisation des moindres carrés:
+alpha = 0.01
+dta = 0.001 #ecart permettant de calculer une derivee approximative
+ainf = 0 #a initial
+K0inf = 5 #k0 initial
+ss = 100 #somme des carres des ecarts initial > ss conditionnel
+while (ss>0.5) {
+  asup = ainf+dta #calculer le nouveau a
+  K0sup = K0inf+dta #calculer le nouveau k
+  
+  #calculer difference de carres des ecarts pour K0:
+  datainf  = donnees(K0inf,ainf) 
+  dtinf = SSE(datainf,P)
+  dataKsup  = donnees(K0sup,ainf)
+  dtKsup = SSE(dataKsup,P)
+  
+  deltaK = dtKsup-dtinf
+  K0inf = K0inf-alpha*deltaK
+  
+  #de meme pour a:
+  dataasup  = donnees(K0inf,asup)
+  dtasup = SSE(dataasup,P)
+  
+  deltaa = dtasup-dtinf
+  ainf = ainf-alpha*deltaa
+  
+  ss = dtinf #actualiser le carre des ecarts
+}
+
+
+#representation graphique
+a = ainf
+K0 = K0inf
+odef = function(t, state, parms){
+  with(as.list(c(state,a)),{
+    dK = a
+    dP = P*0.8*(1-P/K) 
+    return(list(c(dK, dP))) 
+  })
+}
+state = c(K = K0, P = dataset$P[1])
+dt = 0.01
+times = seq(0,10,dt)
+times_keep = seq(0,10/dt, 0.5/dt)+1
+out = ode(state, times, odef, a)
+out = data.frame(out)
+P_keep = out$P[times_keep]
+plot(dataset$t,dataset$P,ylim = c(0,5), xlab = 'Time', ylab = 'P')
+points(seq(0,10,0.5), P_keep,col='red')
+points(out$time, out$K, col = 'blue', pch = '.')
+legend('time', 'P')
+
